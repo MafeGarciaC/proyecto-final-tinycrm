@@ -8,7 +8,8 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import axios from 'axios'
 
 // Configure axios
-axios.defaults.baseURL = 'http://localhost:8080'
+// Ruta relativa: Nginx del frontend hace de proxy hacia /api, así funciona detrás del balanceador y desde otros equipos
+axios.defaults.baseURL = ''
 axios.defaults.headers.common['Content-Type'] = 'application/json'
 axios.defaults.withCredentials = true
 

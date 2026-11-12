@@ -1,10 +1,13 @@
 package com.spkd.tinycrm.tinyos.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import javax.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
+// Evita el error 500 en /api/auth/me al serializar el proxy lazy de Hibernate
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "users")
 public class User {
 
