@@ -12,16 +12,14 @@
 | **VS Code** + extensión **Remote - SSH** | Editar los archivos de la VM desde Windows | code.visualstudio.com |
 | **Docker Desktop** *(opcional)* | Probar contenedores en Windows antes de pasarlos a la VM | Ya está en el PC de Mafe. |
 
-**PC María Isabel:** debe tener **50 GB libres en total** antes de crear la VM. Hoy tiene ~32 GB libres, así que hay que desocupar **unos 20 GB más**. (40 GB para la VM + ~10 GB de margen para que Windows no se quede sin espacio.)
-
-### La VM Ubuntu (una en cada PC)
-| | PC Mafe | PC María Isabel |
+### Qué corre en cada PC (según el diagrama del profe)
+| | PC Mafe = **Máquina #1** | PC María Isabel = **Máquina #2** |
 |---|---|---|
-| Nombre | `acme-central` | `acme-clienteb` |
-| RAM | 9 GB | 7 GB |
-| CPU | 6 | 4 |
-| Disco | 60 GB | 40 GB |
-| Red | **Adaptador puente** + IP fija | **Adaptador puente** + IP fija |
+| Qué hace | Todos los servidores (VM Ubuntu) | Hace de usuario: navegador con el DNS apuntando a la Máquina #1 |
+| VM | `acme-maquina1`: **8 GB RAM, 6 CPU, 60 GB disco**, adaptador puente | No necesita. Opcional: VM cliente de 2 GB RAM / 15 GB disco |
+| Disco | Le sobra (~237 GB libres) | Con los ~32 GB libres alcanza |
+
+Todo el sistema medido usa ~2,5 GB de RAM; 8 GB dejan margen para compilar. **Paso a paso de la VM: [GUIA_VM.md](GUIA_VM.md).**
 
 Dentro de la VM:
 ```bash

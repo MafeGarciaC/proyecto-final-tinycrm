@@ -36,4 +36,5 @@ bash scripts/levantar.sh      # ~2-3 min; con --build si cambió el código
 - [Arquitectura](docs/arquitectura/ARQUITECTURA.md)
 - [Preguntas para el profe](docs/PREGUNTAS_PROFE.md)
 - [Qué instalar en cada PC](docs/INSTALACION.md)
+- [Montar la VM Ubuntu paso a paso](docs/GUIA_VM.md)
 - [Guía de sustentación (comandos)](docs/SUSTENTACION.md)
