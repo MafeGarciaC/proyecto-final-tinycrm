@@ -214,11 +214,11 @@
       <div class="demo-accounts" v-if="showDemoAccounts">
         <el-divider>Demo Accounts</el-divider>
         <div class="demo-buttons">
-          <el-button size="small" @click="loginAsDemo('admin')" :disabled="loading">
-            Admin (admin/admin123)
+          <el-button size="small" @click="loginAsDemo('admin_a')" :disabled="loading">
+            Cliente A (admin_a/admin123)
           </el-button>
-          <el-button size="small" @click="loginAsDemo('support')" :disabled="loading">
-            Support (support/support123)
+          <el-button size="small" @click="loginAsDemo('admin_b')" :disabled="loading">
+            Cliente B (admin_b/admin123)
           </el-button>
         </div>
       </div>
@@ -475,14 +475,10 @@ export default {
       }
     }
 
-    const loginAsDemo = (type) => {
-      if (type === 'admin') {
-        loginForm.username = 'admin'
-        loginForm.password = 'admin123'
-      } else if (type === 'support') {
-        loginForm.username = 'support'
-        loginForm.password = 'support123'
-      }
+    // Un admin por cliente: el middleware decide a qué cliente enviar según el usuario
+    const loginAsDemo = (username) => {
+      loginForm.username = username
+      loginForm.password = 'admin123'
       handleLogin()
     }
 

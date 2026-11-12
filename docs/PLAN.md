@@ -50,16 +50,18 @@ La rúbrica suma 110 pts. Primero lo que habilita todo lo demás.
 ### Fase 3 — Eventos: broker + componente central · *responsable: Eventos*
 - [ ] RabbitMQ.
 - [ ] Evento desde la BD (flecha Cluster DB → Broker del diagrama). Propuesta: trigger `AFTER INSERT ON users` → tabla `outbox_usuarios` → publicador → RabbitMQ `{username, email, cliente, fecha}`. Ver opciones en ARQUITECTURA.md.
+- [x] **BD Usuarios** (`eventos/`, 10.1.1.10): tabla `usuarios(username, email, cliente, id_en_cliente)`; usuario `middleware` solo lectura y `consumer` lectura/escritura. Por ahora cargada a mano con los 4 usuarios iniciales.
 - [ ] **Consumer**: consume la cola y guarda `usuario → cliente` en la **BD Usuarios** (= componente central).
 - [x] Resolver el choque de `admin`/`support` repetidos entre clientes (hallazgo 10).
 - [ ] Prueba: crear usuario en A → aparece en BD Usuarios con cliente A; ídem B.
 
 ### Fase 4 — Middleware de enrutamiento · *responsable: Entrada*
-- [ ] Un solo dominio `www.tiny.com` para los dos clientes.
-- [ ] En `POST /api/auth/login` lee el `username`, consulta la BD Usuarios y reenvía al LB del cliente correcto.
-- [ ] Guarda una cookie firmada `cliente=A|B`; las peticiones siguientes van directo al LB de ese cliente.
-- [ ] Usuario de A **no** puede llegar al LB de B (aislamiento).
-- [ ] Definir qué pasa con el registro público ("Create Account"): ¿a qué cliente va? (pregunta al profe).
+- [x] Middleware en Node.js (`entrada/middleware/servidor.js`, 10.1.1.5, puerto 80 de la máquina). Una sola entrada para los dos clientes (falta el dominio `www.tiny.com` → Fase 5).
+- [x] En `POST /api/auth/login` lee el usuario (o email), consulta la BD Usuarios y reenvía al LB del cliente correcto.
+- [x] Guarda una cookie firmada (HMAC) `tiny_cliente=A|B`, HttpOnly; las peticiones siguientes van al LB de ese cliente.
+- [x] Aislamiento probado (12-nov): cookie alterada → 401; cookie de B con sesión de A → 401; usuario inexistente → rechazado sin revelar si existe.
+- [x] Registro público bloqueado (403 con mensaje): los usuarios los crea el admin de cada cliente.
+- [x] Pantalla de login con botones "Cliente A (admin_a)" y "Cliente B (admin_b)".
 
 ### Fase 5 — DNS, firewall y red · *responsable: Entrada*
 - [ ] bind9: `www.tiny.com` → IP de la Máquina #1 (el "192.168.0.1" del diagrama).

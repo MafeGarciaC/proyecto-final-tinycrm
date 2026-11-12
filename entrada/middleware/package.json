@@ -1,0 +1,13 @@
+{
+  "name": "tiny-middleware",
+  "version": "1.0.0",
+  "description": "Middleware de enrutamiento por cliente para TinyCRM multi-cliente",
+  "main": "servidor.js",
+  "private": true,
+  "scripts": {
+    "start": "node servidor.js"
+  },
+  "dependencies": {
+    "mysql2": "3.11.3"
+  }
+}

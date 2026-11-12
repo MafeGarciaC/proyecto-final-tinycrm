@@ -153,6 +153,46 @@ curl -s -H 'Content-Type: application/json' -d '{"username":"admin_a","password"
 
 ---
 
+## Middleware y enrutamiento por cliente (15 pts)
+
+Entrada única para los dos clientes: http://localhost (luego `www.tiny.com`). Código: `entrada/middleware/servidor.js`.
+
+**Cómo decide a dónde enviar a cada usuario:**
+1. En el login (`POST /api/auth/login`) lee el usuario, lo busca en la **BD Usuarios** y reenvía al **LB de su cliente** (A = 10.1.1.6, B = 10.1.1.7).
+2. Si el login sale bien guarda la cookie `tiny_cliente=A.<firma>` (HttpOnly, firmada con HMAC para que no se pueda cambiar a mano).
+3. Todas las demás peticiones `/api/...` van al LB que dice la cookie. Sin cookie → 401 (pantalla de login).
+4. El registro público está bloqueado: los usuarios los crea el admin de cada cliente.
+
+**Demostración en el navegador:** entrar con "Cliente A" → F12 → Red → `/api/auth/me` → cabeceras `x-middleware-cliente: A`, `x-cliente: A`, `x-instancia: app1|app2`. Cerrar sesión, entrar con "Cliente B" → mismas cabeceras con `B`.
+
+**Ver las decisiones del middleware en vivo:**
+```bash
+docker logs -f tiny-middleware
+# LOGIN "admin_a" -> cliente A (10.1.1.6)
+# LOGIN "admin_b" -> cliente B (10.1.1.7)
+# LOGIN "fantasma" -> no está en la BD Usuarios: rechazado
+```
+
+**Estado del middleware, la BD Usuarios y los dos LB:**
+```bash
+curl -s http://localhost/middleware/estado
+```
+
+**Contenido del componente central (BD Usuarios):**
+```bash
+docker exec tiny-usuarios-db mariadb -uroot -proot_usuarios_2026 -e "SELECT username, email, cliente, id_en_cliente FROM usuarios.usuarios"
+```
+
+**Aislamiento por la entrada:**
+```bash
+# Cookie de cliente inventada -> 401
+curl -s -o /dev/null -w "%{http_code}\n" -H "Cookie: tiny_cliente=B.00000000000000000000000000000000" http://localhost/api/tickets
+# Registro público -> bloqueado
+curl -s -H 'Content-Type: application/json' -d '{"username":"x"}' http://localhost/api/auth/register
+```
+
+---
+
 ### Si el clúster no levanta (recuperación manual)
 Si todos los nodos se cayeron de golpe (corte de luz), ninguno queda con `safe_to_bootstrap: 1`. Ver cuál tiene el `seqno` más alto y marcarlo:
 ```bash

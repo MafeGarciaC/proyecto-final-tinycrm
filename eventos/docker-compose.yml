@@ -1,0 +1,37 @@
+# Componente central (Red DMZ del diagrama): BD "Usuarios".
+# Aquí se agregarán también el Broker de mensajería y el Consumer.
+# Levantar desde la raíz del proyecto:
+#   docker compose --env-file .env -f eventos/docker-compose.yml up -d --wait
+name: tiny-eventos
+
+services:
+  usuarios-db:
+    image: mariadb:11.4
+    container_name: tiny-usuarios-db
+    hostname: usuarios-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${USUARIOS_DB_ROOT_PASSWORD}
+      USUARIOS_MIDDLEWARE_PASSWORD: ${USUARIOS_MIDDLEWARE_PASSWORD}
+      USUARIOS_CONSUMER_PASSWORD: ${USUARIOS_CONSUMER_PASSWORD}
+    command: ["--innodb-buffer-pool-size=64M"]
+    volumes:
+      - usuarios_datos:/var/lib/mysql
+      - ./usuarios-db/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      tiny_dmz:
+        ipv4_address: 10.1.1.10
+
+volumes:
+  usuarios_datos:
+    name: usuarios_datos
+
+networks:
+  tiny_dmz:
+    external: true
