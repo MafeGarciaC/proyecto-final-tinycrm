@@ -1,5 +1,5 @@
-# Entrada al sistema (Red DMZ del diagrama): Middleware de enrutamiento por cliente.
-# Aquí se agregarán también el DNS y el firewall.
+# Entrada al sistema: DNS + Middleware de enrutamiento por cliente.
+# El firewall no es un contenedor: son reglas en la Máquina #1 (scripts/firewall.sh).
 # Levantar desde la raíz del proyecto:
 #   docker compose --env-file .env -f entrada/docker-compose.yml up -d --build --wait
 name: tiny-entrada
@@ -28,6 +28,36 @@ services:
     networks:
       tiny_dmz:
         ipv4_address: 10.1.1.5
+
+  # DNS (bind9): www.tiny.com -> IP de la Máquina #1. Para todo lo demás pregunta a 8.8.8.8.
+  dns:
+    image: internetsystemsconsortium/bind9:9.18
+    container_name: tiny-dns
+    restart: unless-stopped
+    environment:
+      IP_MAQUINA1: ${IP_MAQUINA1}
+    volumes:
+      - ./dns/named.conf:/etc/bind/named.conf:ro
+      - ./dns/db.tiny.com.plantilla:/etc/bind/db.tiny.com.plantilla:ro
+    # Genera la zona con la IP del .env y arranca bind en primer plano (-g) como usuario bind
+    entrypoint: ["sh", "-c"]
+    command:
+      - sed "s/IP_MAQUINA1/$${IP_MAQUINA1}/g; s/\r$$//" /etc/bind/db.tiny.com.plantilla > /tmp/db.tiny.com
+        && chmod 644 /tmp/db.tiny.com
+        && exec named -g -u bind -c /etc/bind/named.conf
+    ports:
+      # En la VM Ubuntu es el 53. En Windows el 53 lo ocupa el sistema, por eso se puede cambiar.
+      - "${DNS_PORT:-53}:53/udp"
+      - "${DNS_PORT:-53}:53/tcp"
+    healthcheck:
+      test: ["CMD-SHELL", "dig +short @127.0.0.1 www.tiny.com | grep -q ."]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      tiny_dmz:
+        ipv4_address: 10.1.1.53
 
 networks:
   tiny_dmz:

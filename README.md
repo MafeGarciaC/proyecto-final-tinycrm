@@ -10,23 +10,25 @@ Arquitectura: [docs/arquitectura/ARQUITECTURA.md](docs/arquitectura/ARQUITECTURA
 | `tinycrm/` | Código de TinyCRM ([spkdroid/TinyCRM](https://github.com/spkdroid/TinyCRM), Apache-2.0) con nuestras correcciones | ✅ funciona |
 | `bd/` | Red interna: clúster MariaDB Galera (3 nodos), Load Balancer BD (HAProxy) y Adminer | ✅ funciona |
 | `apps/` | Por cliente: 2 instancias de TinyCRM (backend + frontend) + Load Balancer del cliente con sticky session | ✅ funciona |
-| `entrada/` | Middleware de enrutamiento por cliente (✅ funciona), DNS y firewall (pendiente) | 🟡 |
+| `entrada/` | Middleware de enrutamiento por cliente y DNS (bind9, `www.tiny.com`) | ✅ funciona |
 | `eventos/` | Sincronización de usuarios: trigger + outbox en la BD de cada cliente → publicadores → RabbitMQ → consumer → BD Usuarios | ✅ funciona |
-| `scripts/` | Crear redes, levantar y apagar todo | en progreso |
+| `scripts/` | Levantar, apagar y ver el estado de todo; redes; firewall de la VM | ✅ (firewall: probar en la VM) |
 | `docs/` | Plan, arquitectura, preguntas al profe, instalación, guía de sustentación | — |
 
-## Levantar lo que hay
+## Levantar todo
 
 ```bash
-cp .env.example .env          # solo la primera vez
-bash scripts/redes.sh
-docker compose --env-file .env -f bd/docker-compose.yml up -d --build --wait --wait-timeout 600
-docker compose --env-file .env --env-file apps/cliente-a.env -f apps/docker-compose.yml -p tiny-a up -d --build --wait --wait-timeout 600
-docker compose --env-file .env --env-file apps/cliente-b.env -f apps/docker-compose.yml -p tiny-b up -d --wait --wait-timeout 600
-docker compose --env-file .env -f eventos/docker-compose.yml up -d --build --wait --wait-timeout 300
-docker compose --env-file .env -f entrada/docker-compose.yml up -d --build --wait
+cp .env.example .env          # solo la primera vez; revisar IP_MAQUINA1 y DNS_PORT
+bash scripts/levantar.sh      # ~2-3 min; con --build si cambió el código
 # Abrir http://localhost  (admin_a / admin123  o  admin_b / admin123)
 ```
+
+| Script | Para qué |
+|---|---|
+| `bash scripts/levantar.sh [--build]` | Levanta todo en orden: redes → BD → cliente A → cliente B → broker → middleware + DNS |
+| `bash scripts/apagar.sh` | Apaga todo en orden inverso. **No borra datos** |
+| `bash scripts/estado.sh` | Resumen: contenedores, clúster Galera, middleware, broker y direcciones |
+| `sudo bash scripts/firewall.sh` | Solo en la VM Ubuntu: deja entrar únicamente 80 (TinyCRM), 53 (DNS) y 22 (SSH) |
 
 ## Documentos
 

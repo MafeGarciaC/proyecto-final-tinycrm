@@ -10,24 +10,24 @@ R="-uroot -proot_tiny_2026"
 
 ---
 
-## Levantar / apagar
+## Orquestación (10 pts): levantar / apagar / estado
 
 ```bash
-bash scripts/redes.sh
-docker compose --env-file .env -f bd/docker-compose.yml up -d --build --wait --wait-timeout 600
-```
-`--wait` espera a que los 3 nodos estén **sincronizados** (no solo encendidos), con un máximo de 10 minutos para no quedarse bloqueado.
-
-Apps de los dos clientes (mismo archivo, distinto `.env`):
-```bash
-docker compose --env-file .env --env-file apps/cliente-a.env -f apps/docker-compose.yml -p tiny-a up -d --build --wait --wait-timeout 600
-docker compose --env-file .env --env-file apps/cliente-b.env -f apps/docker-compose.yml -p tiny-b up -d --wait --wait-timeout 600
+bash scripts/levantar.sh     # todo, en orden, esperando que cada capa esté sana (~2-3 min)
+bash scripts/estado.sh       # resumen para empezar la sustentación
+bash scripts/apagar.sh       # todo, en orden inverso; los datos quedan en los volúmenes
 ```
 
-Apagar la BD (compose apaga primero los nodos 2 y 3 y de último el 1, así el 1 puede recrear el clúster al volver):
-```bash
-docker compose --env-file .env -f bd/docker-compose.yml stop
-```
+**Orden de `levantar.sh` y por qué:**
+1. Redes (`tiny_dmz`, `tiny_interna`): todos los demás se conectan a ellas.
+2. Clúster de BD + LB BD: las apps no arrancan sin base de datos.
+3. Cliente A y 4. Cliente B: crean sus tablas en su base al arrancar.
+5. Broker + publicadores + consumer: el publicador necesita que exista la tabla `users` para crear el trigger.
+6. Middleware + DNS: la entrada se abre de último, cuando todo lo de atrás ya responde.
+
+Cada paso usa `docker compose up --wait --wait-timeout N`: espera a que los contenedores estén **sanos** (healthcheck), no solo encendidos, con un tiempo máximo para no quedarse bloqueado (lo explicó el profe con el clúster).
+
+En el clúster Galera, `apagar.sh` apaga primero los nodos 2 y 3 y de último el 1 (depende de él): así el nodo 1 queda con `safe_to_bootstrap: 1` y recrea el clúster al volver.
 
 ---
 
@@ -237,6 +237,49 @@ docker logs --since 2m tiny-publicador-b | grep -E "cerrada|Conectado|PUBLICADO"
 ```
 
 **¿Y si el admin de B crea un usuario con un username que ya es de A?** El consumer lo ignora (`CONFLICTO ... ya pertenece al cliente A`) para que nadie de B pueda quedarse con el login de un usuario de A.
+
+---
+
+## DNS
+
+bind9 en `entrada/dns`. `www.tiny.com` → IP de la Máquina #1 (`IP_MAQUINA1` en `.env`). Para cualquier otro dominio pregunta a 8.8.8.8 (recursivo), así la Máquina #2 puede usarlo como único DNS y seguir navegando.
+
+**Antes de la sustentación** (el profe contó el caso del estudiante al que el DHCP le cambió la IP):
+```bash
+ip -4 addr show                  # ¿sigue siendo la misma IP?
+grep IP_MAQUINA1 .env            # si cambió, actualizarla aquí y:
+docker compose --env-file .env -f entrada/docker-compose.yml up -d dns
+```
+
+**Certificar que el DNS funciona** (desde la Máquina #2, Windows):
+```
+nslookup www.tiny.com              (con el DNS de la casa: NO es nuestra IP)
+nslookup www.tiny.com <IP_MAQUINA1> (con nuestro DNS: devuelve la IP de la Máquina #1)
+```
+Desde Linux: `dig @<IP_MAQUINA1> www.tiny.com` → en la respuesta aparece la bandera `aa` (autoritativa: el dominio es nuestro).
+
+**Usarlo de verdad en la Máquina #2:** configuración de red → IPv4 → DNS manual = `<IP_MAQUINA1>` → abrir http://www.tiny.com.
+
+**Zona:** `entrada/dns/db.tiny.com.plantilla` (TTL 300 s: si la IP cambia, los clientes se enteran en 5 min). **Configuración:** `entrada/dns/named.conf`.
+
+---
+
+## Firewall (VM Ubuntu)
+
+```bash
+sudo bash scripts/firewall.sh            # aplicar
+sudo bash scripts/firewall.sh estado     # ver reglas
+sudo dmesg | grep FW-TINY                # intentos bloqueados
+```
+- Desde fuera solo se puede entrar a **80** (TinyCRM por el middleware), **53** (DNS) y **22** (SSH).
+- Adminer (8090), RabbitMQ (15672) y los LB de cada cliente (8101/8102) **no** son accesibles desde la Máquina #2: solo desde la propia Máquina #1.
+- **Pregunta del profe en clase:** "¿por qué UFW está activo pero el puerto del contenedor sigue abierto?" → Docker publica los puertos con reglas **FORWARD** (DNAT), no INPUT; UFW solo filtra INPUT. Por eso las reglas de los contenedores van en la cadena **`DOCKER-USER`**.
+
+**Prueba desde la Máquina #2:**
+```
+curl http://<IP_MAQUINA1>/            -> responde (80 abierto)
+curl http://<IP_MAQUINA1>:15672/      -> no responde (bloqueado)
+```
 
 ---
 

@@ -1,0 +1,17 @@
+; Zona tiny.com. "IP_MAQUINA1" se reemplaza al arrancar con la IP de la Máquina #1 (archivo .env).
+; TTL corto (5 min): si la IP de la máquina cambia (DHCP), los clientes se enteran rápido.
+$TTL 300
+@       IN  SOA ns1.tiny.com. admin.tiny.com. (
+            2026111201  ; serial (fecha + número de cambio)
+            3600        ; refresh
+            600         ; retry
+            604800      ; expire
+            300 )       ; TTL de respuestas negativas
+
+; Servidor de nombres
+@       IN  NS  ns1.tiny.com.
+
+; Registros A: todo apunta a la Máquina #1 (firewall -> middleware)
+ns1     IN  A   IP_MAQUINA1
+@       IN  A   IP_MAQUINA1
+www     IN  A   IP_MAQUINA1

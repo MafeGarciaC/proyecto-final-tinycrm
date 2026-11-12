@@ -67,13 +67,14 @@ La rúbrica suma 110 pts. Primero lo que habilita todo lo demás.
 - [x] Pantalla de login con botones "Cliente A (admin_a)" y "Cliente B (admin_b)".
 
 ### Fase 5 — DNS, firewall y red · *responsable: Entrada*
-- [ ] bind9: `www.tiny.com` → IP de la Máquina #1 (el "192.168.0.1" del diagrama).
-- [ ] Firewall: solo 80/443 abiertos hacia el middleware; reglas en `DOCKER-USER`/FORWARD (UFW solo no bloquea Docker — lo mostró el profe).
+- [x] bind9 (`entrada/dns`, 10.1.1.53): `www.tiny.com` y `tiny.com` → `IP_MAQUINA1` del `.env` (TTL 5 min); recursión con forwarders 8.8.8.8 solo para redes privadas. Probado con `dig` (respuesta autoritativa) y entrando por el dominio.
+- [x] Firewall escrito (`scripts/firewall.sh`): UFW para la VM + cadena `DOCKER-USER` para los contenedores; desde fuera solo 80, 53 y 22.
+- [ ] **Probar el firewall en la VM Ubuntu** (en Docker Desktop de Windows no aplica).
 - [ ] VM de la Máquina #1 en adaptador puente con IP fija; Máquina #2 con el DNS apuntando a ella. Plan B: Tailscale.
 
 ### Fase 6 — Orquestación y sustentación · *todos*
-- [ ] Script para levantar todo en orden (BD → HAProxy BD → backends → HAProxy app → central → middleware → DNS).
-- [ ] `docs/SUSTENTACION.md` con los comandos listos para copiar y pegar (lo pidió el profe).
+- [x] `scripts/levantar.sh` / `apagar.sh` / `estado.sh`. Probado (12-nov): apagar todo (22 s) y levantar todo (136 s, 22 contenedores sanos); los datos y los logins sobreviven.
+- [x] `docs/SUSTENTACION.md` con los comandos listos para copiar y pegar (lo pidió el profe).
 - [ ] Diagrama final de la arquitectura implementada.
 
 ---
