@@ -13,6 +13,14 @@ GRANT ALL PRIVILEGES ON \`$DB_A_NAME\`.* TO '$DB_A_USER'@'%';
 CREATE USER IF NOT EXISTS '$DB_B_USER'@'%' IDENTIFIED BY '$DB_B_PASSWORD';
 GRANT ALL PRIVILEGES ON \`$DB_B_NAME\`.* TO '$DB_B_USER'@'%';
 
+-- Publicador de eventos de cada cliente: crea la tabla outbox y el trigger "usuario creado"
+-- en la base de SU cliente y marca los eventos ya enviados al broker.
+CREATE USER IF NOT EXISTS 'outbox_a'@'%' IDENTIFIED BY '$DB_A_OUTBOX_PASSWORD';
+GRANT SELECT, INSERT, UPDATE, CREATE, TRIGGER ON \`$DB_A_NAME\`.* TO 'outbox_a'@'%';
+
+CREATE USER IF NOT EXISTS 'outbox_b'@'%' IDENTIFIED BY '$DB_B_OUTBOX_PASSWORD';
+GRANT SELECT, INSERT, UPDATE, CREATE, TRIGGER ON \`$DB_B_NAME\`.* TO 'outbox_b'@'%';
+
 -- Usuario sin contraseña ni permisos: solo lo usa HAProxy para comprobar que el nodo responde
 CREATE USER IF NOT EXISTS 'haproxy_check'@'%';
 

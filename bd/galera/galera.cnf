@@ -12,6 +12,10 @@ bind-address             = 0.0.0.0
 innodb_buffer_pool_size  = 128M
 max_connections          = 150
 
+# Permite crear el trigger "usuario creado" sin privilegio SUPER.
+# Galera replica como si hubiera binlog y por eso MariaDB lo exige.
+log_bin_trust_function_creators = 1
+
 character-set-server     = utf8mb4
 collation-server         = utf8mb4_unicode_ci
 

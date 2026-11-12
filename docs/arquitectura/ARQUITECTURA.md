@@ -63,7 +63,7 @@ El diagrama pone la flecha **Cluster DB → Broker**. Formas de lograrlo:
 
 | Opción | Cómo | Pros | Contras |
 |---|---|---|---|
-| **A. Outbox + trigger** (recomendada) | Trigger `AFTER INSERT ON users` escribe en una tabla `outbox_usuarios`; un pequeño publicador lee esa tabla y publica en RabbitMQ | Coincide con la flecha del diagrama, no toca el código de TinyCRM, ligero | Hay que programar el publicador |
+| **A. Outbox + trigger** ✅ (la que implementamos) | Trigger `AFTER INSERT ON users` escribe en una tabla `outbox_usuarios`; un pequeño publicador lee esa tabla y publica en RabbitMQ | Coincide con la flecha del diagrama, no toca el código de TinyCRM, ligero | Hay que programar el publicador |
 | B. CDC con Debezium | Debezium lee el binlog de MariaDB y publica cada cambio | Es "la forma de la industria" | Pesado en RAM, más complejo |
 | C. TinyCRM publica | Modificar el backend Java para publicar al crear usuario | Simple de entender | No coincide con la flecha; hay que tocar 2 sitios del código |
 

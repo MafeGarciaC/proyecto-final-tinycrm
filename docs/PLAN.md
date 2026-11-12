@@ -24,6 +24,8 @@ Esto cambia cómo hay que montar la arquitectura:
 | 5 | Backend: Spring Boot 2.7 / Java 17, Hibernate `ddl-auto=update` (crea las tablas solo). Frontend: Vue 3 + Nginx con proxy `/api/ → backend:8080`. | | Galera: todas las tablas tienen `PRIMARY KEY` autoincremental ✔ (Galera lo exige). Probar el driver MySQL contra MariaDB. |
 | 6 | El usuario **no tiene campo de cliente/empresa** (solo `company`, texto libre). | `User.java` | El "a qué cliente pertenece" lo da la base de datos donde se creó (`tinycrm_a` o `tinycrm_b`) y viaja en el evento. |
 | 10 | `DataInitializer` crea `admin` y `support` en **cada** base al arrancar. | `config/DataInitializer.java` | ✅ **Resuelto**: nombres configurables por variable (`TINY_ADMIN_USERNAME`…). Cliente A: `admin_a` / `support_a`; cliente B: `admin_b` / `support_b` (contraseñas `admin123` / `support123`). |
+| 12 | `POST /api/users` (crear usuario desde el panel de admin) guardaba la contraseña **en texto plano**: ese usuario nunca podía iniciar sesión. | `controller/UserController.java` | ✅ **Corregido**: usa `AuthenticationService.registerUser`, que cifra la contraseña y valida duplicados. |
+| 13 | En Galera, `CREATE TABLE/TRIGGER` bloquea la tabla en los 3 nodos y cancela escrituras en curso (salió un 500 al crear usuario mientras el publicador se reiniciaba). | `eventos/publicador` | ✅ **Corregido**: el publicador solo crea outbox y trigger si no existen y reintenta la conexión al broker sin reiniciarse. |
 | 11 | TinyCRM escribe en la BD en **cada** petición (actualiza `lastAccessedAt` de la sesión). Con Galera multi-maestro podría haber conflictos de escritura. | `AuthenticationService.validateSession` | Probado: 40 peticiones en paralelo con la misma sesión → 40 OK, 0 conflictos. Vigilar si aparecen `Deadlock` en los logs. |
 
 ---
@@ -48,12 +50,13 @@ La rúbrica suma 110 pts. Primero lo que habilita todo lo demás.
 - [x] Pruebas (12-nov): usuarios replicados en los 3 nodos; sticky (5/5 a la misma instancia); balanceo de visitantes nuevos app1/app2; `admin_a` no entra por el LB B; apagar 1 backend de A → A sigue **sin perder la sesión**; apagar los 2 → A da 503 y B sigue.
 
 ### Fase 3 — Eventos: broker + componente central · *responsable: Eventos*
-- [ ] RabbitMQ.
-- [ ] Evento desde la BD (flecha Cluster DB → Broker del diagrama). Propuesta: trigger `AFTER INSERT ON users` → tabla `outbox_usuarios` → publicador → RabbitMQ `{username, email, cliente, fecha}`. Ver opciones en ARQUITECTURA.md.
-- [x] **BD Usuarios** (`eventos/`, 10.1.1.10): tabla `usuarios(username, email, cliente, id_en_cliente)`; usuario `middleware` solo lectura y `consumer` lectura/escritura. Por ahora cargada a mano con los 4 usuarios iniciales.
-- [ ] **Consumer**: consume la cola y guarda `usuario → cliente` en la **BD Usuarios** (= componente central).
+- [x] **RabbitMQ** (10.1.1.20 DMZ / 10.1.2.20 interna): exchange `tiny.usuarios` (topic), cola durable `central.usuarios`. Panel http://localhost:15672.
+- [x] **Evento desde la BD** (flecha Cluster DB → Broker): trigger `trg_usuario_creado` en `users` → tabla `outbox_usuarios` → **publicador** por cliente (`eventos/publicador`, usuario de BD `outbox_x` que solo ve su base) → RabbitMQ `{evento, cliente, username, email, idEnCliente, fecha}`. No toca el código de TinyCRM.
+- [x] **BD Usuarios** (`eventos/`, 10.1.1.10): tabla `usuarios(username, email, cliente, id_en_cliente)`; usuario `middleware` solo lectura y `consumer` lectura/escritura.
+- [x] **Consumer** (`eventos/consumer`, 10.1.1.21): consume la cola y guarda `usuario → cliente`. Si el username ya es de otro cliente lo ignora y avisa (CONFLICTO).
 - [x] Resolver el choque de `admin`/`support` repetidos entre clientes (hallazgo 10).
-- [ ] Prueba: crear usuario en A → aparece en BD Usuarios con cliente A; ídem B.
+- [x] Pruebas (12-nov): usuario creado por el admin de A/B entra por el middleware ~2 s después; username repetido en el otro cliente → conflicto, no roba el login; consumer caído → el evento espera en la cola; broker caído → TinyCRM sigue creando usuarios y los eventos esperan en el outbox hasta que vuelve.
+- [x] Corregido en TinyCRM: el panel de admin guardaba la contraseña en texto plano y ese usuario no podía entrar (hallazgo 12).
 
 ### Fase 4 — Middleware de enrutamiento · *responsable: Entrada*
 - [x] Middleware en Node.js (`entrada/middleware/servidor.js`, 10.1.1.5, puerto 80 de la máquina). Una sola entrada para los dos clientes (falta el dominio `www.tiny.com` → Fase 5).

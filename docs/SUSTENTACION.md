@@ -193,6 +193,53 @@ curl -s -H 'Content-Type: application/json' -d '{"username":"x"}' http://localho
 
 ---
 
+## Sincronización de usuarios + Broker (10 + 10 pts)
+
+```
+BD del cliente ── trigger ──► outbox_usuarios ──► publicador-X ──► RabbitMQ ──► consumer ──► BD Usuarios ──► middleware
+   (interna)                     (interna)          (interna)     (interna+DMZ)    (DMZ)        (DMZ)
+```
+- **Trigger** `trg_usuario_creado` en la tabla `users` de cada cliente: todo usuario nuevo queda en `outbox_usuarios`, sin importar cómo se creó y sin tocar el código de TinyCRM. Es la flecha **Cluster DB → Broker** del diagrama.
+- **Publicador** (uno por cliente): cada 2 s envía los pendientes del outbox a RabbitMQ (exchange `tiny.usuarios`, clave `usuario.creado.a|b`) y los marca publicados cuando el broker confirma.
+- **Consumer**: lee la cola `central.usuarios` y registra `usuario → cliente` en la BD Usuarios. Confirma (ack) solo después de guardar.
+
+**Demostración completa** (≈ 1 minuto):
+1. Entrar con `admin_a` en http://localhost → Settings / usuarios → crear `nuevo_a` (contraseña `clave123`).
+2. Ver el evento pasar por cada pieza:
+```bash
+docker logs --since 1m tiny-publicador-a | grep PUBLICADO     # PUBLICADO usuario "nuevo_a"
+docker logs --since 1m tiny-consumer     | grep REGISTRADO    # REGISTRADO "nuevo_a" -> cliente A
+docker exec tiny-usuarios-db mariadb -uroot -proot_usuarios_2026 -e "SELECT username, cliente FROM usuarios.usuarios"
+```
+3. Cerrar sesión y entrar con `nuevo_a` / `clave123` → el middleware lo manda al cliente A.
+
+**Panel del broker:** http://localhost:15672 (usuario `tiny`, clave `clave_rabbit_2026`) → Queues → `central.usuarios` (mensajes, consumidores, gráficas).
+
+**Outbox de un cliente:**
+```bash
+docker exec galera-1 mariadb -uroot -proot_tiny_2026 -e "SELECT id, username, publicado_en FROM tinycrm_a.outbox_usuarios"
+```
+
+**¿Qué pasa si se cae el consumer?** El mensaje espera en la cola (es durable) y se procesa al volver:
+```bash
+docker stop tiny-consumer
+# crear un usuario...
+docker exec tiny-rabbitmq rabbitmqctl -q list_queues name messages    # central.usuarios 1
+docker start tiny-consumer                                            # lo registra solo
+```
+
+**¿Qué pasa si se cae el broker?** TinyCRM sigue funcionando y creando usuarios; los eventos quedan en el outbox con `publicado_en = NULL` y se envían cuando el broker vuelve:
+```bash
+docker stop tiny-rabbitmq
+# crear un usuario... (TinyCRM responde normal)
+docker start tiny-rabbitmq
+docker logs --since 2m tiny-publicador-b | grep -E "cerrada|Conectado|PUBLICADO"
+```
+
+**¿Y si el admin de B crea un usuario con un username que ya es de A?** El consumer lo ignora (`CONFLICTO ... ya pertenece al cliente A`) para que nadie de B pueda quedarse con el login de un usuario de A.
+
+---
+
 ### Si el clúster no levanta (recuperación manual)
 Si todos los nodos se cayeron de golpe (corte de luz), ninguno queda con `safe_to_bootstrap: 1`. Ver cuál tiene el `seqno` más alto y marcarlo:
 ```bash

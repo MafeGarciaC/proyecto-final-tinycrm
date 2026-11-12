@@ -15,6 +15,8 @@ x-galera: &galera
     DB_B_NAME: ${DB_B_NAME}
     DB_B_USER: ${DB_B_USER}
     DB_B_PASSWORD: ${DB_B_PASSWORD}
+    DB_A_OUTBOX_PASSWORD: ${DB_A_OUTBOX_PASSWORD}
+    DB_B_OUTBOX_PASSWORD: ${DB_B_OUTBOX_PASSWORD}
   healthcheck:
     # Sano = el nodo está sincronizado con el clúster
     test: ["CMD-SHELL", "mariadb -uroot -p\"$$MARIADB_ROOT_PASSWORD\" -Nse \"SHOW STATUS LIKE 'wsrep_local_state_comment'\" | grep -q Synced"]
@@ -36,6 +38,8 @@ services:
       DB_B_NAME: ${DB_B_NAME}
       DB_B_USER: ${DB_B_USER}
       DB_B_PASSWORD: ${DB_B_PASSWORD}
+      DB_A_OUTBOX_PASSWORD: ${DB_A_OUTBOX_PASSWORD}
+      DB_B_OUTBOX_PASSWORD: ${DB_B_OUTBOX_PASSWORD}
       GALERA_BOOTSTRAP: "1"
       GALERA_PEERS: "10.1.2.12 10.1.2.13"
     command: ["--wsrep_node_name=galera-1", "--wsrep_node_address=10.1.2.11"]

@@ -1,8 +1,19 @@
-# Componente central (Red DMZ del diagrama): BD "Usuarios".
-# Aquí se agregarán también el Broker de mensajería y el Consumer.
-# Levantar desde la raíz del proyecto:
-#   docker compose --env-file .env -f eventos/docker-compose.yml up -d --wait
+# Sincronización de usuarios: Broker de mensajería + Consumer + BD "Usuarios" (componente central).
+#
+#   BD del cliente (trigger -> outbox) -> publicador-X -> RabbitMQ -> consumer -> BD Usuarios
+#        Red Interna                       Interna        Interna+DMZ    DMZ         DMZ
+#
+# El broker es el único punto entre la red interna y la DMZ para los eventos, como en el diagrama.
+# Levantar desde la raíz del proyecto (después de bd/ y apps/):
+#   docker compose --env-file .env -f eventos/docker-compose.yml up -d --build --wait
 name: tiny-eventos
+
+x-node: &node
+  restart: unless-stopped
+  # Si pierde el broker o la BD el proceso termina y Docker lo vuelve a arrancar
+  depends_on:
+    rabbitmq:
+      condition: service_healthy
 
 services:
   usuarios-db:
@@ -28,10 +39,87 @@ services:
       tiny_dmz:
         ipv4_address: 10.1.1.10
 
+  # Broker de mensajería. Panel web: http://localhost:15672 (usuario/clave del .env)
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: tiny-rabbitmq
+    hostname: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
+    volumes:
+      - rabbitmq_datos:/var/lib/rabbitmq
+    ports:
+      - "${RABBIT_ADMIN_PORT:-15672}:15672"
+    healthcheck:
+      # Sano = ya acepta conexiones AMQP (ping responde antes de abrir el puerto)
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+    networks:
+      tiny_dmz:
+        ipv4_address: 10.1.1.20
+      tiny_interna:
+        ipv4_address: 10.1.2.20
+
+  # Publicadores: uno por cliente, cada uno con un usuario de BD que solo ve la base de su cliente
+  publicador-a:
+    <<: *node
+    build: ./publicador
+    image: tiny/publicador:1
+    container_name: tiny-publicador-a
+    environment:
+      CLIENTE: A
+      DB_HOST: 10.1.2.1        # Load Balancer BD
+      DB_NAME: ${DB_A_NAME}
+      DB_USER: outbox_a
+      DB_PASSWORD: ${DB_A_OUTBOX_PASSWORD}
+      RABBIT_URL: amqp://${RABBIT_USER}:${RABBIT_PASSWORD}@10.1.2.20:5672
+    networks:
+      tiny_interna:
+        ipv4_address: 10.1.2.21
+
+  publicador-b:
+    <<: *node
+    build: ./publicador
+    image: tiny/publicador:1
+    container_name: tiny-publicador-b
+    environment:
+      CLIENTE: B
+      DB_HOST: 10.1.2.1
+      DB_NAME: ${DB_B_NAME}
+      DB_USER: outbox_b
+      DB_PASSWORD: ${DB_B_OUTBOX_PASSWORD}
+      RABBIT_URL: amqp://${RABBIT_USER}:${RABBIT_PASSWORD}@10.1.2.20:5672
+    networks:
+      tiny_interna:
+        ipv4_address: 10.1.2.22
+
+  consumer:
+    <<: *node
+    build: ./consumer
+    image: tiny/consumer:1
+    container_name: tiny-consumer
+    environment:
+      USUARIOS_DB_HOST: 10.1.1.10
+      USUARIOS_DB_USER: consumer
+      USUARIOS_DB_PASSWORD: ${USUARIOS_CONSUMER_PASSWORD}
+      RABBIT_URL: amqp://${RABBIT_USER}:${RABBIT_PASSWORD}@10.1.1.20:5672
+    networks:
+      tiny_dmz:
+        ipv4_address: 10.1.1.21
+
 volumes:
   usuarios_datos:
     name: usuarios_datos
+  rabbitmq_datos:
+    name: rabbitmq_datos
 
 networks:
   tiny_dmz:
+    external: true
+  tiny_interna:
     external: true

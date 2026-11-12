@@ -2,6 +2,7 @@ package com.spkd.tinycrm.tinyos.controller;
 
 import com.spkd.tinycrm.tinyos.dto.UserProfileDto;
 import com.spkd.tinycrm.tinyos.entity.User;
+import com.spkd.tinycrm.tinyos.service.AuthenticationService;
 import com.spkd.tinycrm.tinyos.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,9 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private AuthenticationService authenticationService;
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> getAllUsers() {
@@ -70,7 +74,9 @@ public class UserController {
     @PostMapping
     public ResponseEntity<Map<String, Object>> createUser(@RequestBody User user) {
         try {
-            User createdUser = userService.createUser(user);
+            // registerUser cifra la contraseña y valida duplicados; antes se guardaba en texto plano
+            // y el usuario creado por el admin no podía iniciar sesión
+            User createdUser = authenticationService.registerUser(user);
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("user", convertToPublicDto(createdUser));

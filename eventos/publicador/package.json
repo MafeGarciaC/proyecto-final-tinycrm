@@ -1,0 +1,14 @@
+{
+  "name": "tiny-publicador",
+  "version": "1.0.0",
+  "description": "Publica en RabbitMQ los eventos usuario creado del outbox de un cliente",
+  "main": "publicador.js",
+  "private": true,
+  "scripts": {
+    "start": "node publicador.js"
+  },
+  "dependencies": {
+    "amqplib": "0.10.4",
+    "mysql2": "3.11.3"
+  }
+}

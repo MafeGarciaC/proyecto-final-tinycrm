@@ -1,0 +1,14 @@
+{
+  "name": "tiny-consumer",
+  "version": "1.0.0",
+  "description": "Registra en la BD Usuarios los eventos usuario creado de RabbitMQ",
+  "main": "consumer.js",
+  "private": true,
+  "scripts": {
+    "start": "node consumer.js"
+  },
+  "dependencies": {
+    "amqplib": "0.10.4",
+    "mysql2": "3.11.3"
+  }
+}
