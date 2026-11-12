@@ -1,0 +1,15 @@
+# Dependencias y builds
+node_modules/
+tinycrm/frontend/dist/
+tinycrm/tinyOS/build/
+tinycrm/tinyOS/.gradle/
+
+# Secretos locales
+*.local.env
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Variables locales (se crea desde .env.example)
+/.env

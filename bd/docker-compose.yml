@@ -1,0 +1,115 @@
+# Capa de datos (Red Interna del diagrama): Cluster DB + Load Balancer BD + Adminer.
+# Levantar desde la raíz del proyecto:
+#   docker compose --env-file .env -f bd/docker-compose.yml up -d --wait --wait-timeout 600
+name: tiny-bd
+
+x-galera: &galera
+  build: ./galera
+  image: tiny/galera:1
+  restart: unless-stopped
+  environment:
+    MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    DB_A_NAME: ${DB_A_NAME}
+    DB_A_USER: ${DB_A_USER}
+    DB_A_PASSWORD: ${DB_A_PASSWORD}
+    DB_B_NAME: ${DB_B_NAME}
+    DB_B_USER: ${DB_B_USER}
+    DB_B_PASSWORD: ${DB_B_PASSWORD}
+  healthcheck:
+    # Sano = el nodo está sincronizado con el clúster
+    test: ["CMD-SHELL", "mariadb -uroot -p\"$$MARIADB_ROOT_PASSWORD\" -Nse \"SHOW STATUS LIKE 'wsrep_local_state_comment'\" | grep -q Synced"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 60s
+
+services:
+  galera-1:
+    <<: *galera
+    container_name: galera-1
+    hostname: galera-1
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      DB_A_NAME: ${DB_A_NAME}
+      DB_A_USER: ${DB_A_USER}
+      DB_A_PASSWORD: ${DB_A_PASSWORD}
+      DB_B_NAME: ${DB_B_NAME}
+      DB_B_USER: ${DB_B_USER}
+      DB_B_PASSWORD: ${DB_B_PASSWORD}
+      GALERA_BOOTSTRAP: "1"
+      GALERA_PEERS: "10.1.2.12 10.1.2.13"
+    command: ["--wsrep_node_name=galera-1", "--wsrep_node_address=10.1.2.11"]
+    volumes:
+      - galera_1_datos:/var/lib/mysql
+    networks:
+      tiny_interna:
+        ipv4_address: 10.1.2.11
+
+  galera-2:
+    <<: *galera
+    container_name: galera-2
+    hostname: galera-2
+    command: ["--wsrep_node_name=galera-2", "--wsrep_node_address=10.1.2.12"]
+    volumes:
+      - galera_2_datos:/var/lib/mysql
+    networks:
+      tiny_interna:
+        ipv4_address: 10.1.2.12
+    depends_on:
+      galera-1:
+        condition: service_healthy
+
+  galera-3:
+    <<: *galera
+    container_name: galera-3
+    hostname: galera-3
+    command: ["--wsrep_node_name=galera-3", "--wsrep_node_address=10.1.2.13"]
+    volumes:
+      - galera_3_datos:/var/lib/mysql
+    networks:
+      tiny_interna:
+        ipv4_address: 10.1.2.13
+    depends_on:
+      galera-1:
+        condition: service_healthy
+
+  lb-bd:
+    image: haproxy:2.8
+    container_name: lb-bd
+    restart: unless-stopped
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      tiny_interna:
+        ipv4_address: 10.1.2.1
+    depends_on:
+      galera-1:
+        condition: service_healthy
+
+  # Herramienta web para consultar cada nodo (demostrar la replicación en la sustentación).
+  # Está en las dos redes: se abre desde el navegador por la DMZ y llega a los nodos por la interna.
+  adminer:
+    image: adminer:4
+    container_name: tiny-adminer
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8090}:8080"
+    networks:
+      tiny_dmz:
+        ipv4_address: 10.1.1.100
+      tiny_interna:
+        ipv4_address: 10.1.2.100
+
+volumes:
+  galera_1_datos:
+    name: galera_1_datos
+  galera_2_datos:
+    name: galera_2_datos
+  galera_3_datos:
+    name: galera_3_datos
+
+networks:
+  tiny_dmz:
+    external: true
+  tiny_interna:
+    external: true

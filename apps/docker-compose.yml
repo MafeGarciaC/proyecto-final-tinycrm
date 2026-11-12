@@ -1,0 +1,116 @@
+# Cluster de aplicación de UN cliente (A o B) + su Load Balancer.
+# El mismo archivo sirve para los dos clientes; cambia el archivo de variables:
+#   docker compose --env-file .env --env-file apps/cliente-a.env -f apps/docker-compose.yml -p tiny-a up -d --build --wait
+#   docker compose --env-file .env --env-file apps/cliente-b.env -f apps/docker-compose.yml -p tiny-b up -d --wait
+#
+# Por instancia de TinyCRM hay dos contenedores:
+#   app-N = backend Spring Boot (DMZ + Interna: habla con el LB BD)
+#   web-N = frontend Vue servido por Nginx (solo DMZ)
+# El LB del cliente manda /api/* a los backends (con sticky session) y el resto a los web.
+
+x-backend: &backend
+  build: ../tinycrm/tinyOS
+  image: tiny/tinycrm-backend:1
+  restart: unless-stopped
+  environment: &backend-env
+    # BD del cliente a través del Load Balancer BD (10.1.2.1)
+    SPRING_DATASOURCE_URL: jdbc:mysql://10.1.2.1:3306/${DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    SPRING_DATASOURCE_USERNAME: ${DB_USER}
+    SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+    SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+    SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    SPRING_JPA_SHOW_SQL: "false"
+    SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.MariaDB103Dialect
+    # El LB BD corta conexiones inactivas a 1 minuto (timeout client 1m):
+    # el pool hace un ping cada 30 s y renueva cada conexión antes del minuto.
+    SPRING_DATASOURCE_HIKARI_KEEPALIVE_TIME: "30000"
+    SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: "55000"
+    SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+    LOGGING_LEVEL_COM_SPKD_TINYCRM: INFO
+    CORS_ALLOWED_ORIGINS: "http://localhost:*,http://*.tiny.com,http://*.tiny.com:*"
+    TINY_ADMIN_USERNAME: ${TINY_ADMIN_USERNAME}
+    TINY_ADMIN_EMAIL: ${TINY_ADMIN_EMAIL}
+    TINY_SUPPORT_USERNAME: ${TINY_SUPPORT_USERNAME}
+    TINY_SUPPORT_EMAIL: ${TINY_SUPPORT_EMAIL}
+    JAVA_OPTS: "-Xmx384m -Xms128m -XX:+UseContainerSupport"
+  healthcheck:
+    # /api/auth/me responde 401 sin sesión: significa que la app está viva
+    test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/auth/me | grep -qE '200|401'"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 60s
+
+x-web: &web
+  build: ../tinycrm/frontend
+  image: tiny/tinycrm-frontend:1
+  restart: unless-stopped
+  volumes:
+    # Nginx solo sirve los archivos del frontend; el /api lo enruta el LB del cliente
+    - ./web/nginx.conf:/etc/nginx/nginx.conf:ro
+
+services:
+  app-1:
+    <<: *backend
+    container_name: tiny-${CLIENTE_MIN}-app-1
+    hostname: ${CLIENTE_MIN}-app-1
+    networks:
+      tiny_dmz:
+        ipv4_address: ${APP1_DMZ_IP}
+      tiny_interna:
+        ipv4_address: ${APP1_INT_IP}
+
+  app-2:
+    <<: *backend
+    container_name: tiny-${CLIENTE_MIN}-app-2
+    hostname: ${CLIENTE_MIN}-app-2
+    networks:
+      tiny_dmz:
+        ipv4_address: ${APP2_DMZ_IP}
+      tiny_interna:
+        ipv4_address: ${APP2_INT_IP}
+    # Arranca después de app-1 para que no creen las tablas al mismo tiempo
+    depends_on:
+      app-1:
+        condition: service_healthy
+
+  web-1:
+    <<: *web
+    container_name: tiny-${CLIENTE_MIN}-web-1
+    networks:
+      tiny_dmz:
+        ipv4_address: ${WEB1_IP}
+
+  web-2:
+    <<: *web
+    container_name: tiny-${CLIENTE_MIN}-web-2
+    networks:
+      tiny_dmz:
+        ipv4_address: ${WEB2_IP}
+
+  lb:
+    image: haproxy:2.8
+    container_name: tiny-${CLIENTE_MIN}-lb
+    restart: unless-stopped
+    environment:
+      CLIENTE: ${CLIENTE}
+      APP1_IP: ${APP1_DMZ_IP}
+      APP2_IP: ${APP2_DMZ_IP}
+      WEB1_IP: ${WEB1_IP}
+      WEB2_IP: ${WEB2_IP}
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "${LB_PORT}:80"
+    networks:
+      tiny_dmz:
+        ipv4_address: ${LB_IP}
+    depends_on:
+      app-1:
+        condition: service_healthy
+
+networks:
+  tiny_dmz:
+    external: true
+  tiny_interna:
+    external: true

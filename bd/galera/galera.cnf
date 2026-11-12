@@ -1,0 +1,24 @@
+# Configuración común de los 3 nodos MariaDB Galera.
+# El nombre y la IP de cada nodo se pasan por la línea de comandos en docker-compose.yml.
+
+[mysqld]
+# Requisitos de Galera
+binlog_format            = ROW
+default_storage_engine   = InnoDB
+innodb_autoinc_lock_mode = 2
+bind-address             = 0.0.0.0
+
+# Poca memoria: son 3 nodos en la misma máquina
+innodb_buffer_pool_size  = 128M
+max_connections          = 150
+
+character-set-server     = utf8mb4
+collation-server         = utf8mb4_unicode_ci
+
+[galera]
+wsrep_on              = ON
+wsrep_provider        = /usr/lib/galera/libgalera_smm.so
+wsrep_cluster_name    = tiny_cluster
+wsrep_cluster_address = gcomm://10.1.2.11,10.1.2.12,10.1.2.13
+# rsync: copia completa de datos a un nodo que entra (no necesita usuario especial)
+wsrep_sst_method      = rsync
